@@ -5,17 +5,26 @@
 #define CODEUR_DROIT_A 18
 #define CODEUR_DROIT_B 19
 #define TIRETTE 5
+#define CAPTEUR_LASER_G 40
+#define CAPTEUR_LASER_D 41
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// capteur laser
 /*
 les deux capteurs lasers ont leurs pin SDA et SCL connecté sur les pin 20 et 21 càd les pin SDA et SCL de la carte arduino
 */
-int const CAPTEUR_1 = 22; // pin Xshut du capteur (mise a LOW pour reset et HIGH pour les activer)
-int const CAPTEUR_2 = 24; // pin Xshut du capteur (mise a LOW pour reset et HIGH pour les activer)
+// address we will assign if dual sensor is present
+#define LOX1_ADDRESS 0x30
+#define LOX2_ADDRESS 0x31
+
+// set the pins to shutdown
+#define SHT_LOX1 40
+#define SHT_LOX2 41
 
 // objects for the vl53l0x
 Adafruit_VL53L0X lox1 = Adafruit_VL53L0X();
 Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
 
+// this holds the measurement
 VL53L0X_RangingMeasurementData_t mesure_1;
 VL53L0X_RangingMeasurementData_t mesure_2;
 
@@ -61,30 +70,10 @@ int const DIRECTION_B = 13;
 uint32_t tDebut;
 
 
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// stratégie
+uint8_t ETAT=0; 
 
 void setup() {
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// capteur laser
-  // mise en reset des deux capteurs
-  digitalWrite(CAPTEUR_1, LOW);    
-  digitalWrite(CAPTEUR_2, LOW);
-  delay(10);
-  
-  // on sort du reset
-  digitalWrite(CAPTEUR_1, HIGH);    
-  digitalWrite(CAPTEUR_2, HIGH);
-  delay(10);
-
-  // on met en reset le capteur_2 et on active le capteur_1
-  digitalWrite(CAPTEUR_1, HIGH);    
-  digitalWrite(CAPTEUR_2, LOW);
-  delay(10);
-  lox1.begin(0x30); // on définit l'adresse du capteur_1
-
-  // on active le capteur_2
-  digitalWrite(CAPTEUR_2, HIGH);
-  delay(10);
-  lox2.begin(0x31); // on définit l'adresse du capteur_2
 
  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////// tirette
     pinMode(TIRETTE, INPUT);
@@ -112,6 +101,24 @@ void setup() {
   //B rising pulse from encodenren activated ai1(). AttachInterrupt 1 is DigitalPin nr 3 on moust Arduino.
   attachInterrupt(4, ai3, RISING);
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// capteurs laser
+  // wait until serial port opens for native USB devices
+  while (! Serial) { delay(1); }
+
+  pinMode(SHT_LOX1, OUTPUT);
+  pinMode(SHT_LOX2, OUTPUT);
+
+  Serial.println(F("Shutdown pins inited..."));
+
+  digitalWrite(SHT_LOX1, LOW);
+  digitalWrite(SHT_LOX2, LOW);
+
+  Serial.println(F("Both in reset mode...(pins are low)"));
+  
+  
+  Serial.println(F("Starting..."));
+  setID();
+
 }
 
 void loop() {
@@ -130,11 +137,11 @@ void loop() {
       }
     else
       {
-        switch()
+        switch(ETAT)
         {
           case 1:
             
-            distance = ?;            
+            distance = 10;            
             
             erreur1 = distance - (counter1*unite_distance); // calcul de l'erreur pour le moteur1 
             erreur2 = distance - (counter2*unite_distance); // calcul de l'erreur pour le moteur2
@@ -206,16 +213,18 @@ void loop() {
             }
             else {
               digitalWrite (DIRECTION_B, LOW); // se passe rien
-              analogWrite(VITESSE_B, 0)
+              analogWrite(VITESSE_B, 0);
             }
 
             break;
 
-          case 2;
+          case 2:
+          break;
             /*
             tourner a droite ou a gauche
             */
-            
+          default:
+          break;
 
 
 
@@ -291,3 +300,60 @@ void ARRET(void){
   delay(3000);
 }
 
+void setID() {
+  // all reset
+  digitalWrite(SHT_LOX1, LOW);    
+  digitalWrite(SHT_LOX2, LOW);
+  delay(10);
+  // all unreset
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, HIGH);
+  delay(10);
+
+  // activating LOX1 and resetting LOX2
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, LOW);
+
+  // initing LOX1
+  if(!lox1.begin(LOX1_ADDRESS)) {
+    Serial.println(F("Failed to boot first VL53L0X"));
+    while(1);
+  }
+  delay(10);
+
+  // activating LOX2
+  digitalWrite(SHT_LOX2, HIGH);
+  delay(10);
+
+  //initing LOX2
+  if(!lox2.begin(LOX2_ADDRESS)) {
+    Serial.println(F("Failed to boot second VL53L0X"));
+    while(1);
+  }
+}
+
+void read_dual_sensors() {
+  
+  lox1.rangingTest(&mesure_1, false); // pass in 'true' to get debug data printout!
+  lox2.rangingTest(&mesure_2, false); // pass in 'true' to get debug data printout!
+
+  // print sensor one reading
+  Serial.print(F("1: "));
+  if(mesure_1.RangeStatus != 4) {     // if not out of range
+    Serial.print(mesure_1.RangeMilliMeter);
+  } else {
+    Serial.print(F("Out of range"));
+  }
+  
+  Serial.print(F(" "));
+
+  // print sensor two reading
+  Serial.print(F("2: "));
+  if(mesure_2.RangeStatus != 4) {
+    Serial.print(mesure_2.RangeMilliMeter);
+  } else {
+    Serial.print(F("Out of range"));
+  }
+  
+  Serial.println();
+}
