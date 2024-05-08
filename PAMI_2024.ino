@@ -1,5 +1,10 @@
 #include "Adafruit_VL53L0X.h" // librairie pour les capteurs laser
 
+#define CODEUR_GAUCHE_A 2
+#define CODEUR_GAUCHE_B 3
+#define CODEUR_DROIT_A 18
+#define CODEUR_DROIT_B 19
+#define TIRETTE 5
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// capteur laser
 /*
 les deux capteurs lasers ont leurs pin SDA et SCL connecté sur les pin 20 et 21 càd les pin SDA et SCL de la carte arduino
@@ -53,8 +58,6 @@ int const DIRECTION_B = 13;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// tirette
 
-int TIRETTE = 32; // def pin tirette
-
 uint32_t tDebut;
 
 
@@ -83,10 +86,13 @@ void setup() {
   delay(10);
   lox2.begin(0x31); // on définit l'adresse du capteur_2
 
-  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////réception de l'information des roues codeuses
- 
-  pinMode(32, INPUT_PULLUP);           // set pin to input et pullup résistance
-  pinMode(34, INPUT_PULLUP);           // set pin to input et pullup résistance
+ ///////////////////////////////////////////////////////////////////////////////////////////////////////////////// tirette
+    pinMode(TIRETTE, INPUT);
+
+ /////////////////////////////////////////////////////////////////////////////////////////////////////////////////réception de l'information des roues codeuses
+ // codeur gauche
+  pinMode(CODEUR_GAUCHE_A, INPUT_PULLUP);           // set pin to input et pullup résistance
+  pinMode(CODEUR_GAUCHE_B, INPUT_PULLUP);           // set pin to input et pullup résistance
   
   //Setting up interrupt
   //A rising pulse from encodenren activated ai0(). AttachInterrupt 0 is DigitalPin nr 2 on moust Arduino.
@@ -95,8 +101,9 @@ void setup() {
   //B rising pulse from encodenren activated ai1(). AttachInterrupt 1 is DigitalPin nr 3 on moust Arduino.
   attachInterrupt(1, ai1, RISING);
 
-  pinMode(38, INPUT_PULLUP);           // set pin to input et pullup résistance
-  pinMode(40, INPUT_PULLUP);           // set pin to input et pullup résistance
+// codeur droit
+  pinMode(18, INPUT_PULLUP);           // set pin to input et pullup résistance
+  pinMode(19, INPUT_PULLUP);           // set pin to input et pullup résistance
   
   //Setting up interrupt
   //A rising pulse from encodenren activated ai0(). AttachInterrupt 0 is DigitalPin nr 2 on moust Arduino.
@@ -235,11 +242,11 @@ else{
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////// codeur 1
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////codeur gauche
 void ai0() {
   // ai0 is activated if DigitalPin nr 2 is going from LOW to HIGH
   // Check pin 3 to determine the direction
-  if(digitalRead(3)==LOW) {
+  if(digitalRead(CODEUR_GAUCHE_B)==LOW) {
     counter1++;
   }else{
     counter1--;
@@ -249,14 +256,14 @@ void ai0() {
 void ai1() {
   // ai0 is activated if DigitalPin nr 3 is going from LOW to HIGH
   // Check with pin 2 to determine the direction
-  if(digitalRead(2)==LOW) {
+  if(digitalRead(CODEUR_GAUCHE_A)==LOW) {
     counter1--;
   }else{
     counter1++;
   }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////// codeur 2
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////codeur droit
 void ai2() {
   if(digitalRead(19)==LOW) {
     counter2++;
