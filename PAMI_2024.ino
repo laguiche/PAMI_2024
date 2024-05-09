@@ -40,7 +40,10 @@
 #define LOX2_ADDRESS 0x31
 
 #define CONSIGNE_MAX 80  //entre 1 et 255
+#define CONSIGNE_ANGLE_MAX1 160 //entre 1 et 255
+#define CONSIGNE_ANGLE_MAX2 65 //entre 1 et 255
 #define SEUIL_CONVERGENCE_DISTANCE 5.0
+#define SEUIL_CONVERGENCE_ANGLE 0.06
 
 #define DUREE_DEBUT 10000
 #define DUREE_FIN 2000000
@@ -67,21 +70,29 @@ volatile signed int counter1 = 0;  //This variable will increase or decrease dep
 volatile signed int counter2 = 0;  //This variable will increase or decrease depending on the rotation of encoder
 
 //calculs d'asservissement
+bool convergence_distance = true;
+bool convergence_angle = true;
 bool convergence = true;
 float distance_consigne = 0.;
 float angle_consigne = 0.;
 float dcodeur = 4.625;  // diamètre de la roue codeuse  (à changer) en cm
 float pi = 3.14159265359;
 float perimetre_roue_codeuse = pi * dcodeur;
+float ecartement_codeur = 22.4;
+float perimetre_rotation_robot = ecartement_codeur * pi;
 float ntour_par_pas = 1200;
 float unite_distance = perimetre_roue_codeuse / ntour_par_pas;
+float unite_rotation = 2 * pi * (unite_distance / perimetre_rotation_robot);
 float erreur_gauche = 0.0;  // erreur pour le codeur 1
 float erreur_droite = 0.0;  // erreur pour le codeur 2
-float k = 10;       // coefficient de proportionalité
+float erreur_angle = 0.0;
+float Kd = 10;  // coefficient de proportionalité distance
+float Ka = 60;  // coefficient de proportionalité angle
 
 //Moteur
 int consigne_gauche = 0;  // consigne du moteur1
 int consigne_droite = 0;  // cosnigne du moteur 2
+int consigne_angle = 0;
 
 //temps match
 uint32_t t0 = 0;
@@ -215,6 +226,18 @@ void setDistance(float distance) {
   Serial.print("consigne distance à ");
   Serial.println(distance);
   distance_consigne = distance;
+  convergence_distance = false;
+  convergence = false;
+  counter1 = 0;
+  counter2 = 0;
+}
+
+//fonction de consigne d'angle en radian
+void setAngle(float angle) {
+  Serial.print("consigne angle à ");
+  Serial.println(angle);
+  angle_consigne = angle;
+  convergence_angle = false;
   convergence = false;
   counter1 = 0;
   counter2 = 0;
@@ -222,55 +245,82 @@ void setDistance(float distance) {
 
 //fonction de calcul de l'asservissement
 void calculs_asservissement(void) {
-  /*if (angle_consigne != 0.)
-    {
+  if (!convergence_angle) {
     //on corrige l'angle
-    }*/
+    erreur_angle = angle_consigne - ((counter2 - counter1) / 2) * unite_rotation;
+    //Serial.println(erreur_angle);
 
+    if (fabs(erreur_angle) >= SEUIL_CONVERGENCE_ANGLE) {
+      consigne_angle = (int)fabs(Ka * erreur_angle);
+      Serial.println(consigne_angle);
+      //écrêtage de la consigne
+      if (erreur_angle > 0) {
+        digitalWrite(DIRECTION_D, HIGH);
+        digitalWrite(DIRECTION_G, LOW);
+        if (consigne_angle >= CONSIGNE_ANGLE_MAX1) { consigne_angle = CONSIGNE_ANGLE_MAX1; }
 
-   if ((distance_consigne != 0.) && (!convergence)) {
+      
+      } else {
+        digitalWrite(DIRECTION_D, LOW);
+        digitalWrite(DIRECTION_G, HIGH);
+        if (consigne_angle >= CONSIGNE_ANGLE_MAX2) { consigne_angle = CONSIGNE_ANGLE_MAX2; }
+      }
+
+      analogWrite(VITESSE_D, consigne_angle);
+      analogWrite(VITESSE_G, consigne_angle);
+    } else {
+      analogWrite(VITESSE_D, 0);
+      analogWrite(VITESSE_G, 0);
+    }
+  }
+
+//Flag de convergence_angle
+    if (fabs(erreur_angle) <= SEUIL_CONVERGENCE_ANGLE)
+      convergence_angle = true;
+
+  if ((!convergence_distance) && (convergence_angle)) {
 
     //calcul de l'erreur
     erreur_gauche = distance_consigne - (counter1 * unite_distance);  // calcul de l'erreur pour le moteur B
     erreur_droite = distance_consigne - (counter2 * unite_distance);  // calcul de l'erreur pour le moteur A
-    
+
 
     if (fabs(erreur_droite) >= SEUIL_CONVERGENCE_DISTANCE) {
-      consigne_droite = k * erreur_droite;
+      consigne_droite = (int)fabs(Kd * erreur_droite);
       //écrêtage de la consigne
       if (consigne_droite >= CONSIGNE_MAX) { consigne_droite = CONSIGNE_MAX; }
 
-      if(erreur_droite<0)
-      digitalWrite(DIRECTION_D, LOW);
+      if (erreur_droite < 0)
+        digitalWrite(DIRECTION_D, LOW);
       else
-      digitalWrite(DIRECTION_D, HIGH);
+        digitalWrite(DIRECTION_D, HIGH);
 
       analogWrite(VITESSE_D, consigne_droite);
     } else
       analogWrite(VITESSE_D, 0);
 
-     if (fabs(erreur_gauche) >= SEUIL_CONVERGENCE_DISTANCE) {
-      consigne_gauche = k * erreur_gauche;
+    if (fabs(erreur_gauche) >= SEUIL_CONVERGENCE_DISTANCE) {
+      consigne_gauche = (int)fabs(Kd * erreur_gauche);
       //écrêtage de la consigne
       if (consigne_gauche >= CONSIGNE_MAX) { consigne_gauche = CONSIGNE_MAX; }
 
-      if(erreur_gauche<0)
-      digitalWrite(DIRECTION_G, LOW);
+      if (erreur_gauche < 0)
+        digitalWrite(DIRECTION_G, LOW);
       else
-      digitalWrite(DIRECTION_G, HIGH);
+        digitalWrite(DIRECTION_G, HIGH);
 
       analogWrite(VITESSE_G, consigne_gauche);
     } else
       analogWrite(VITESSE_G, 0);
 
-    //Flag de convergence
+    //Flag de convergence_distance
     if ((fabs(erreur_gauche) <= SEUIL_CONVERGENCE_DISTANCE) && (fabs(erreur_droite) <= SEUIL_CONVERGENCE_DISTANCE))
-      convergence = true;
+      convergence_distance = true;
 
 
 
   }  //fin correction distance
-
+  convergence = convergence_distance && convergence_angle;
 }  //fin asserv
 
 /*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -345,19 +395,19 @@ void loop() {
             switch (ETAPE) {
               case 0:
                 //avancer de 10 cm
-                Serial.println("Première étape: avancer de 10 cm");
-                setDistance(50);
+                setDistance(15);
                 ETAPE++;
                 break;  //fin de la première étape
 
               case 1:
                 //tourner de 90 deg
-                //setDistance(80);
+                setAngle(-1.57);
                 ETAPE++;
                 break;  //fin de la deuxième étape
 
               case 2:
                 //avancer jusqu'aux pots c'est à dire distance énorme 200 cm
+                setDistance(115);
                 ETAPE++;
                 //setDistance(2000);
 
@@ -365,7 +415,7 @@ void loop() {
                 break;  //étape par défaut : on ne fait rien
 
             }  //fin de la machine à états
-          }    //fin test convergence
+          }    //fin test convergence_distance
           else {
             calculs_asservissement();
           }  //fincalcul asser
