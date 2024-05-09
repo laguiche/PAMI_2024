@@ -19,13 +19,13 @@
 #define SHT_LOX1 40
 #define SHT_LOX2 41
 
-//Moteur A
-#define VITESSE_A 10
-#define DIRECTION_A 12
+//Moteur D
+#define VITESSE_D 10
+#define DIRECTION_D 12
 
-//Moteur B
-#define VITESSE_B 11
-#define DIRECTION_B 13
+//Moteur G
+#define VITESSE_G 11
+#define DIRECTION_G 13
 
 
 
@@ -39,11 +39,11 @@
 #define LOX1_ADDRESS 0x30
 #define LOX2_ADDRESS 0x31
 
-#define CONSIGNE_MAX 200  //entre 1 et 255
-#define SEUIL_CONVERGENCE_DISTANCE 1
+#define CONSIGNE_MAX 80  //entre 1 et 255
+#define SEUIL_CONVERGENCE_DISTANCE 5.0
 
-#define DUREE_DEBUT 90000
-#define DUREE_FIN 100000
+#define DUREE_DEBUT 10000
+#define DUREE_FIN 2000000
 
 
 /*****************************************************************************************************************************************
@@ -75,13 +75,13 @@ float pi = 3.14159265359;
 float perimetre_roue_codeuse = pi * dcodeur;
 float ntour_par_pas = 1200;
 float unite_distance = perimetre_roue_codeuse / ntour_par_pas;
-float erreur1 = 0;  // erreur pour le codeur 1
-float erreur2 = 0;  // erreur pour le codeur 2
+float erreur_gauche = 0.0;  // erreur pour le codeur 1
+float erreur_droite = 0.0;  // erreur pour le codeur 2
 float k = 10;       // coefficient de proportionalité
 
 //Moteur
-int consigne1 = 0;  // consigne du moteur1
-int consigne2 = 0;  // cosnigne du moteur 2
+int consigne_gauche = 0;  // consigne du moteur1
+int consigne_droite = 0;  // cosnigne du moteur 2
 
 //temps match
 uint32_t t0 = 0;
@@ -97,10 +97,10 @@ uint8_t ETAPE = 0;
 */
 
 void avancer(void) {
-  digitalWrite(DIRECTION_A, HIGH);
-  analogWrite(VITESSE_A, 80);
-  digitalWrite(DIRECTION_B, HIGH);
-  analogWrite(VITESSE_B, 65);
+  digitalWrite(DIRECTION_D, HIGH);
+  analogWrite(VITESSE_D, 80);
+  digitalWrite(DIRECTION_G, HIGH);
+  analogWrite(VITESSE_G, 65);
 }
 
 //Fonctions incréments et décréments Codeur Gauche
@@ -141,10 +141,10 @@ void ai3(void) {
 
 //Sous fonctions moteur
 void arret(void) {
-  digitalWrite(DIRECTION_A, HIGH);
-  digitalWrite(DIRECTION_B, HIGH);
-  analogWrite(VITESSE_A, 0);
-  analogWrite(VITESSE_B, 0);
+  digitalWrite(DIRECTION_D, HIGH);
+  digitalWrite(DIRECTION_G, HIGH);
+  analogWrite(VITESSE_D, 0);
+  analogWrite(VITESSE_G, 0);
 }
 
 
@@ -210,8 +210,10 @@ void distanceObstacles() {
   Serial.println();
 }
 
-//fonction de consigne
+//fonction de consigne distance en cm
 void setDistance(float distance) {
+  Serial.print("consigne distance à ");
+  Serial.println(distance);
   distance_consigne = distance;
   convergence = false;
   counter1 = 0;
@@ -225,69 +227,44 @@ void calculs_asservissement(void) {
     //on corrige l'angle
     }*/
 
-  /*
-    MODE CRADE
-    digitalWrite(DIRECTION_A, HIGH);
-      analogWrite (VITESSE_A, CONSIGNE_MAX);
-           digitalWrite(DIRECTION_B, HIGH);
-      analogWrite (VITESSE_B, CONSIGNE_MAX);
-      
-      convergence=true;
-      
-      analogWrite (VITESSE_A, 0);
-      analogWrite (VITESSE_B, 0);
-      */
-  if ((distance_consigne != 0.) && (!convergence)) {
+
+   if ((distance_consigne != 0.) && (!convergence)) {
 
     //calcul de l'erreur
-    erreur1 = distance_consigne - (counter1 * unite_distance);  // calcul de l'erreur pour le moteur B
-    erreur2 = distance_consigne - (counter2 * unite_distance);  // calcul de l'erreur pour le moteur A
+    erreur_gauche = distance_consigne - (counter1 * unite_distance);  // calcul de l'erreur pour le moteur B
+    erreur_droite = distance_consigne - (counter2 * unite_distance);  // calcul de l'erreur pour le moteur A
+    
 
-
-    //MOTEUR A
-    if (erreur2 >= SEUIL_CONVERGENCE_DISTANCE) {
-      consigne2 = k * erreur2;
+    if (fabs(erreur_droite) >= SEUIL_CONVERGENCE_DISTANCE) {
+      consigne_droite = k * erreur_droite;
       //écrêtage de la consigne
-      if (consigne2 >= CONSIGNE_MAX) { consigne2 = CONSIGNE_MAX; }
+      if (consigne_droite >= CONSIGNE_MAX) { consigne_droite = CONSIGNE_MAX; }
 
-      digitalWrite(DIRECTION_A, HIGH);
-      analogWrite(VITESSE_A, consigne2);
+      if(erreur_droite<0)
+      digitalWrite(DIRECTION_D, LOW);
+      else
+      digitalWrite(DIRECTION_D, HIGH);
+
+      analogWrite(VITESSE_D, consigne_droite);
     } else
-      analogWrite(VITESSE_A, 0);
+      analogWrite(VITESSE_D, 0);
 
-    if (erreur2 <= -SEUIL_CONVERGENCE_DISTANCE) {
-      consigne2 = k * erreur2;
+     if (fabs(erreur_gauche) >= SEUIL_CONVERGENCE_DISTANCE) {
+      consigne_gauche = k * erreur_gauche;
       //écrêtage de la consigne
-      if (consigne2 >= CONSIGNE_MAX) { consigne2 = CONSIGNE_MAX; }
+      if (consigne_gauche >= CONSIGNE_MAX) { consigne_gauche = CONSIGNE_MAX; }
 
-      digitalWrite(DIRECTION_A, LOW);
-      analogWrite(VITESSE_A, consigne2);
+      if(erreur_gauche<0)
+      digitalWrite(DIRECTION_G, LOW);
+      else
+      digitalWrite(DIRECTION_G, HIGH);
+
+      analogWrite(VITESSE_G, consigne_gauche);
     } else
-      analogWrite(VITESSE_A, 0);
-
-    //MOTEUR B
-    if (erreur1 >= SEUIL_CONVERGENCE_DISTANCE) {
-      consigne1 = k * erreur1;
-      //écrêtage de la consigne
-      if (consigne1 >= CONSIGNE_MAX) { consigne1 = CONSIGNE_MAX; }
-
-      digitalWrite(DIRECTION_B, HIGH);
-      analogWrite(VITESSE_B, consigne1);
-    } else
-      analogWrite(VITESSE_B, 0);
-
-    if (erreur1 <= -SEUIL_CONVERGENCE_DISTANCE) {
-      consigne1 = k * erreur1;
-      //écrêtage de la consigne
-      if (consigne1 >= CONSIGNE_MAX) { consigne1 = CONSIGNE_MAX; }
-
-      digitalWrite(DIRECTION_B, LOW);
-      analogWrite(VITESSE_B, consigne1);
-    } else
-      analogWrite(VITESSE_B, 0);
+      analogWrite(VITESSE_G, 0);
 
     //Flag de convergence
-    if (((fabs)(erreur1) <= SEUIL_CONVERGENCE_DISTANCE) && (fabs(erreur2) <= SEUIL_CONVERGENCE_DISTANCE))
+    if ((fabs(erreur_gauche) <= SEUIL_CONVERGENCE_DISTANCE) && (fabs(erreur_droite) <= SEUIL_CONVERGENCE_DISTANCE))
       convergence = true;
 
 
@@ -358,52 +335,47 @@ void loop() {
 
       //on est à 90 secondes on lance le match
       if ((duree_match >= DUREE_DEBUT) && (duree_match <= DUREE_FIN)) {
-        Serial.print(temps_match);Serial.print(" - ");Serial.print(t0);Serial.print(" = ");Serial.println(duree_match);
         distanceObstacles();
         //on teste les obstacles si on n'est pas hors range sur au moins un des 2
         if ((mesure_1.RangeMilliMeter <= SEUIL_OBSTACLE) || (mesure_2.RangeMilliMeter <= SEUIL_OBSTACLE)) {
           arret();
-        }
-        else
-        {
-          avancer();
-          /*if (convergence)
-            {
-              switch (ETAPE)
-              {
-                case 0:
-                  //avancer de 10 cm
-                  Serial.println("Première étape: avancer de 10 cm");
-                  setDistance(150);
-                  ETAPE++;
-                  break; //fin de la première étape
+        } else {
+          //avancer();
+          if (convergence) {
+            switch (ETAPE) {
+              case 0:
+                //avancer de 10 cm
+                Serial.println("Première étape: avancer de 10 cm");
+                setDistance(50);
+                ETAPE++;
+                break;  //fin de la première étape
 
-                case 1:
-                  //tourner de 90 deg
-                  break;//fin de la deuxième étape
+              case 1:
+                //tourner de 90 deg
+                //setDistance(80);
+                ETAPE++;
+                break;  //fin de la deuxième étape
 
-                case 2:
+              case 2:
                 //avancer jusqu'aux pots c'est à dire distance énorme 200 cm
+                ETAPE++;
+                //setDistance(2000);
 
-                default:
-                  break; //étape par défaut : on ne fait rien
+              default:
+                break;  //étape par défaut : on ne fait rien
 
-              }//fin de la machine à états
-            }//fin test convergence
-            else
-            {
-              calculs_asservissement();
-            }//fincalcul asser
+            }  //fin de la machine à états
+          }    //fin test convergence
+          else {
+            calculs_asservissement();
+          }  //fincalcul asser
 
-        }  //fin execution corps de match*/
-      }    //fin test fin de match
+        }   //fin execution corps de match
+      }     //fin test fin de match
+      else  //fin test 90 et 100 s
+      {
+        arret();
+      }
     }
-    else  //fin test 90 et 100 s
-    {
-      arret();
-    }
-  }  //fin test init match
-}  //fin tirette
-
-
-}  //fin Loop
+  }
+}
