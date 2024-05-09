@@ -1,4 +1,5 @@
-#include "Adafruit_VL53L0X.h" // librairie pour les capteurs laser
+#include "Adafruit_VL53L0X.h"  // librairie pour les capteurs laser
+#include "math.h"
 
 
 
@@ -31,18 +32,18 @@
 /*****************************************************************************************************************************************
     DEFINITION PARAMETRES
 */
-#define SEUIL_OBSTACLE 150 //[mm]
+#define SEUIL_OBSTACLE 200  //[mm]
 
 //capteurs lasers
 //adresses à programmer pour cahque capteur dans le setup
 #define LOX1_ADDRESS 0x30
 #define LOX2_ADDRESS 0x31
 
-#define CONSIGNE_MAX 200 //entre 1 et 255
+#define CONSIGNE_MAX 200  //entre 1 et 255
 #define SEUIL_CONVERGENCE_DISTANCE 1
 
-#define DUREE_DEBUT 90
-#define DUREE_FIN 100
+#define DUREE_DEBUT 90000
+#define DUREE_FIN 100000
 
 
 /*****************************************************************************************************************************************
@@ -69,18 +70,18 @@ volatile signed int counter2 = 0;  //This variable will increase or decrease dep
 bool convergence = true;
 float distance_consigne = 0.;
 float angle_consigne = 0.;
-float dcodeur = 4.625; // diamètre de la roue codeuse  (à changer) en cm
+float dcodeur = 4.625;  // diamètre de la roue codeuse  (à changer) en cm
 float pi = 3.14159265359;
 float perimetre_roue_codeuse = pi * dcodeur;
 float ntour_par_pas = 1200;
 float unite_distance = perimetre_roue_codeuse / ntour_par_pas;
-float erreur1 = 0; // erreur pour le codeur 1
-float erreur2 = 0; // erreur pour le codeur 2
-float k = 10; // coefficient de proportionalité
+float erreur1 = 0;  // erreur pour le codeur 1
+float erreur2 = 0;  // erreur pour le codeur 2
+float k = 10;       // coefficient de proportionalité
 
 //Moteur
-int consigne1 = 0; // consigne du moteur1
-int consigne2 = 0; // cosnigne du moteur 2
+int consigne1 = 0;  // consigne du moteur1
+int consigne2 = 0;  // cosnigne du moteur 2
 
 //temps match
 uint32_t t0 = 0;
@@ -94,6 +95,13 @@ uint8_t ETAPE = 0;
 /*****************************************************************************************************************************************
     FONCTIONS
 */
+
+void avancer(void) {
+  digitalWrite(DIRECTION_A, HIGH);
+  analogWrite(VITESSE_A, 80);
+  digitalWrite(DIRECTION_B, HIGH);
+  analogWrite(VITESSE_B, 65);
+}
 
 //Fonctions incréments et décréments Codeur Gauche
 void ai0(void) {
@@ -141,16 +149,15 @@ void arret(void) {
 
 
 //Fonction de programmation des capteurs laser
-void setID()
-{
+void setID() {
   // all reset
   digitalWrite(SHT_LOX1, LOW);
   digitalWrite(SHT_LOX2, LOW);
-  delay(10);
+
   // all unreset
   digitalWrite(SHT_LOX1, HIGH);
   digitalWrite(SHT_LOX2, HIGH);
-  delay(10);
+
 
   // activating LOX1 and resetting LOX2
   digitalWrite(SHT_LOX1, HIGH);
@@ -159,27 +166,26 @@ void setID()
   // initing LOX1
   if (!lox1.begin(LOX1_ADDRESS)) {
     Serial.println(F("Failed to boot first VL53L0X"));
-    while (1);
+    while (1)
+      ;
   }
-  delay(10);
 
   // activating LOX2
   digitalWrite(SHT_LOX2, HIGH);
-  delay(10);
 
   //initing LOX2
-  if (!lox2.begin(LOX2_ADDRESS))
-  {
+  if (!lox2.begin(LOX2_ADDRESS)) {
     Serial.println(F("Failed to boot second VL53L0X"));
-    while (1);
+    while (1)
+      ;
   }
 }
 
 //Fonction de lecture des distances des capteurs laser
 void distanceObstacles() {
 
-  lox1.rangingTest(&mesure_1, false); // pass in 'true' to get debug data printout!
-  lox2.rangingTest(&mesure_2, false); // pass in 'true' to get debug data printout!
+  lox1.rangingTest(&mesure_1, false);  // pass in 'true' to get debug data printout!
+  lox2.rangingTest(&mesure_2, false);  // pass in 'true' to get debug data printout!
 
   // print sensor one reading
   /*Serial.print(F("1: "));
@@ -205,8 +211,7 @@ void distanceObstacles() {
 }
 
 //fonction de consigne
-void setDistance(float distance)
-{
+void setDistance(float distance) {
   distance_consigne = distance;
   convergence = false;
   counter1 = 0;
@@ -214,103 +219,93 @@ void setDistance(float distance)
 }
 
 //fonction de calcul de l'asservissement
-void calculs_asservissement(void)
-{
+void calculs_asservissement(void) {
   /*if (angle_consigne != 0.)
     {
     //on corrige l'angle
     }*/
 
-    /*
+  /*
     MODE CRADE
     digitalWrite(DIRECTION_A, HIGH);
       analogWrite (VITESSE_A, CONSIGNE_MAX);
            digitalWrite(DIRECTION_B, HIGH);
       analogWrite (VITESSE_B, CONSIGNE_MAX);
-      delay(2000);
+      
       convergence=true;
       
       analogWrite (VITESSE_A, 0);
       analogWrite (VITESSE_B, 0);
       */
-  if ((distance_consigne != 0.) && (!convergence))
-  {
-     
-    //calcul de l'erreur     
-    erreur1 = distance_consigne - (counter1 * unite_distance); // calcul de l'erreur pour le moteur B
-    erreur2 = distance_consigne - (counter2 * unite_distance); // calcul de l'erreur pour le moteur A
+  if ((distance_consigne != 0.) && (!convergence)) {
+
+    //calcul de l'erreur
+    erreur1 = distance_consigne - (counter1 * unite_distance);  // calcul de l'erreur pour le moteur B
+    erreur2 = distance_consigne - (counter2 * unite_distance);  // calcul de l'erreur pour le moteur A
 
 
     //MOTEUR A
-    if (erreur2 >= SEUIL_CONVERGENCE_DISTANCE)
-    {
-      consigne2 = k * erreur2 ;
+    if (erreur2 >= SEUIL_CONVERGENCE_DISTANCE) {
+      consigne2 = k * erreur2;
       //écrêtage de la consigne
       if (consigne2 >= CONSIGNE_MAX) { consigne2 = CONSIGNE_MAX; }
-      
+
       digitalWrite(DIRECTION_A, HIGH);
-      analogWrite (VITESSE_A, consigne2);
-    }
-    else
+      analogWrite(VITESSE_A, consigne2);
+    } else
       analogWrite(VITESSE_A, 0);
 
-    if (erreur2 <= -SEUIL_CONVERGENCE_DISTANCE)
-    {
-      consigne2 = k * erreur2 ;
+    if (erreur2 <= -SEUIL_CONVERGENCE_DISTANCE) {
+      consigne2 = k * erreur2;
       //écrêtage de la consigne
       if (consigne2 >= CONSIGNE_MAX) { consigne2 = CONSIGNE_MAX; }
-      
+
       digitalWrite(DIRECTION_A, LOW);
-      analogWrite (VITESSE_A, consigne2);
-    }
-    else
+      analogWrite(VITESSE_A, consigne2);
+    } else
       analogWrite(VITESSE_A, 0);
 
     //MOTEUR B
-    if (erreur1 >= SEUIL_CONVERGENCE_DISTANCE)
-    {
-      consigne1 = k * erreur1 ;
+    if (erreur1 >= SEUIL_CONVERGENCE_DISTANCE) {
+      consigne1 = k * erreur1;
       //écrêtage de la consigne
       if (consigne1 >= CONSIGNE_MAX) { consigne1 = CONSIGNE_MAX; }
-      
+
       digitalWrite(DIRECTION_B, HIGH);
-      analogWrite (VITESSE_B, consigne1);
-    }
-    else
+      analogWrite(VITESSE_B, consigne1);
+    } else
       analogWrite(VITESSE_B, 0);
 
-    if (erreur1 <= -SEUIL_CONVERGENCE_DISTANCE)
-    {
-      consigne1 = k * erreur1 ;
+    if (erreur1 <= -SEUIL_CONVERGENCE_DISTANCE) {
+      consigne1 = k * erreur1;
       //écrêtage de la consigne
       if (consigne1 >= CONSIGNE_MAX) { consigne1 = CONSIGNE_MAX; }
-      
+
       digitalWrite(DIRECTION_B, LOW);
-      analogWrite (VITESSE_B, consigne1);
-    }
-    else
+      analogWrite(VITESSE_B, consigne1);
+    } else
       analogWrite(VITESSE_B, 0);
 
     //Flag de convergence
-    if(fabs(erreur1)<=SEUIL_CONVERGENCE_DISTANCE && fabs(erreur1)<=SEUIL_CONVERGENCE_DISTANCE)
-      convergence=true;
+    if (((fabs)(erreur1) <= SEUIL_CONVERGENCE_DISTANCE) && (fabs(erreur2) <= SEUIL_CONVERGENCE_DISTANCE))
+      convergence = true;
 
-    delay(150);
 
-  }//fin correction distance
 
-}//fin asserv
+  }  //fin correction distance
+
+}  //fin asserv
 
 /*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                                             SETUP
   --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void setup() {
-  
+
   Serial.begin(115200);
-  
-  delay (10);
-  
+
+
+
   //Init des entrées et sorties
   pinMode(TIRETTE, INPUT);
 
@@ -332,8 +327,7 @@ void setup() {
 
   //Initialisation des capteurs laser
   // wait until serial port opens for native USB devices
-  while (! Serial) {
-    delay(1);
+  while (!Serial) {
   }
 
   pinMode(SHT_LOX1, OUTPUT);
@@ -352,44 +346,28 @@ void setup() {
 }
 
 void loop() {
-  if (digitalRead(TIRETTE) == LOW)
-  {
-    if (t0 == 0)
-    {
+  if (digitalRead(TIRETTE) == LOW) {
+    if (t0 == 0) {
       //je commence le match (init du temps t0)
       t0 = millis();
-      Serial.println( "Tirette retirée, initialisation du t0");
-    }
-    else
-    {
+      Serial.println("Tirette retirée, initialisation du t0");
+    } else {
       temps_match = millis();
       duree_match = temps_match - t0;
+      //Serial.print(temps_match);Serial.print(" - ");Serial.print(t0);Serial.print(" = ");Serial.println(duree_match);
 
       //on est à 90 secondes on lance le match
-      if (duree_match >= (DUREE_DEBUT*1000))
-      {
+      if ((duree_match >= DUREE_DEBUT) && (duree_match <= DUREE_FIN)) {
+        Serial.print(temps_match);Serial.print(" - ");Serial.print(t0);Serial.print(" = ");Serial.println(duree_match);
         distanceObstacles();
         //on teste les obstacles si on n'est pas hors range sur au moins un des 2
-        if ((mesure_1.RangeStatus != 4)|| (mesure_2.RangeStatus != 4))
-        {
-          if (((mesure_1.RangeMilliMeter <= SEUIL_OBSTACLE) && (mesure_1.RangeStatus != 4)) || ((mesure_2.RangeMilliMeter <= SEUIL_OBSTACLE) && (mesure_2.RangeStatus != 4)))
-          {
-            arret();
-            Serial.println("O");
-          }
+        if ((mesure_1.RangeMilliMeter <= SEUIL_OBSTACLE) || (mesure_2.RangeMilliMeter <= SEUIL_OBSTACLE)) {
+          arret();
         }
         else
         {
-          //100 secondes c'est la fin du match, on s'arrête
-          if (duree_match >= (DUREE_FIN*1000))
-          {
-            arret();
-            Serial.println("Fin du match");
-          }
-          //on est sans obstacles et entre 90s et 100s, on réalise les actions
-          else
-          {
-            if (convergence)
+          avancer();
+          /*if (convergence)
             {
               switch (ETAPE)
               {
@@ -411,15 +389,21 @@ void loop() {
                   break; //étape par défaut : on ne fait rien
 
               }//fin de la machine à états
-            }
+            }//fin test convergence
             else
             {
               calculs_asservissement();
             }//fincalcul asser
 
-          }//fin execution corps de match
-        }//fin test fin de match
-      }//fin test obstacles
-    }//fin test 90 secondes
-  }// fin test init match
-}//fin test TIRETTE
+        }  //fin execution corps de match*/
+      }    //fin test fin de match
+    }
+    else  //fin test 90 et 100 s
+    {
+      arret();
+    }
+  }  //fin test init match
+}  //fin tirette
+
+
+}  //fin Loop
