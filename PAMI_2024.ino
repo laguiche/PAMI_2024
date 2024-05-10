@@ -437,7 +437,9 @@ void loop() {
                 //avancer jusqu'aux pots c'est à dire distance énorme 200 cm
                 setDistance(115, 4000);
                 ETAPE++;
-                //setDistance(2000);
+                break;
+
+              
 
               default:
                 break;  //étape par défaut : on ne fait rien
