@@ -11,6 +11,8 @@
 #define CODEUR_DROIT_A 18
 #define CODEUR_DROIT_B 19
 
+#define LED 42
+
 #define TIRETTE 5
 
 //Capteurs laser
@@ -27,7 +29,8 @@
 #define VITESSE_G 11
 #define DIRECTION_G 13
 
-
+//contacteur
+#define CONTACTEUR A3
 
 /*****************************************************************************************************************************************
     DEFINITION PARAMETRES
@@ -41,12 +44,15 @@
 
 #define CONSIGNE_MAX 80  //entre 1 et 255
 #define CONSIGNE_ANGLE_MAX1 160 //entre 1 et 255
-#define CONSIGNE_ANGLE_MAX2 65 //entre 1 et 255
+#define CONSIGNE_ANGLE_MAX2 220 //entre 1 et 255
 #define SEUIL_CONVERGENCE_DISTANCE 5.0
-#define SEUIL_CONVERGENCE_ANGLE 0.06
+#define SEUIL_CONVERGENCE_ANGLE 0.04
 
-#define DUREE_DEBUT 10000
-#define DUREE_FIN 2000000
+#define DUREE_DEBUT 90000
+#define DUREE_FIN 100000
+
+#define BLEU 1
+#define JAUNE 2
 
 
 /*****************************************************************************************************************************************
@@ -60,6 +66,10 @@ Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
 /*****************************************************************************************************************************************
     VARIABLES GLOBALES
 */
+
+//couleur équipes
+int couleur_equipe = 1; 
+int signe_equipe=-1; //1 Jaune et -1 Bleu
 
 //Pour stocker la valeur mesurée des capteurs laser
 VL53L0X_RangingMeasurementData_t mesure_1;
@@ -96,6 +106,9 @@ int consigne_angle = 0;
 
 //temps match
 uint32_t t0 = 0;
+uint32_t timeout_init=0;
+uint32_t timeout_angle=0;
+uint32_t timeout_distance=0;
 uint32_t temps_match = 0;
 uint32_t duree_match = 0;
 
@@ -222,9 +235,10 @@ void distanceObstacles() {
 }
 
 //fonction de consigne distance en cm
-void setDistance(float distance) {
+void setDistance(float distance, uint32_t duree_max) {
   Serial.print("consigne distance à ");
   Serial.println(distance);
+  timeout_distance=duree_max;
   distance_consigne = distance;
   convergence_distance = false;
   convergence = false;
@@ -233,10 +247,11 @@ void setDistance(float distance) {
 }
 
 //fonction de consigne d'angle en radian
-void setAngle(float angle) {
+void setAngle(float angle, uint32_t duree_max) {
   Serial.print("consigne angle à ");
   Serial.println(angle);
   angle_consigne = angle;
+  timeout_angle=duree_max;
   convergence_angle = false;
   convergence = false;
   counter1 = 0;
@@ -246,6 +261,9 @@ void setAngle(float angle) {
 //fonction de calcul de l'asservissement
 void calculs_asservissement(void) {
   if (!convergence_angle) {
+    if(timeout_init==0)
+      timeout_init=duree_match;
+
     //on corrige l'angle
     erreur_angle = angle_consigne - ((counter2 - counter1) / 2) * unite_rotation;
     //Serial.println(erreur_angle);
@@ -275,10 +293,15 @@ void calculs_asservissement(void) {
   }
 
 //Flag de convergence_angle
-    if (fabs(erreur_angle) <= SEUIL_CONVERGENCE_ANGLE)
+    if ((fabs(erreur_angle) <= SEUIL_CONVERGENCE_ANGLE) || ((duree_match-timeout_init)>timeout_angle))
+    {
       convergence_angle = true;
+      timeout_init=0;
+    }
 
   if ((!convergence_distance) && (convergence_angle)) {
+    if(timeout_init==0)
+      timeout_init=duree_match;
 
     //calcul de l'erreur
     erreur_gauche = distance_consigne - (counter1 * unite_distance);  // calcul de l'erreur pour le moteur B
@@ -314,8 +337,11 @@ void calculs_asservissement(void) {
       analogWrite(VITESSE_G, 0);
 
     //Flag de convergence_distance
-    if ((fabs(erreur_gauche) <= SEUIL_CONVERGENCE_DISTANCE) && (fabs(erreur_droite) <= SEUIL_CONVERGENCE_DISTANCE))
+    if (((fabs(erreur_gauche) <= SEUIL_CONVERGENCE_DISTANCE) && (fabs(erreur_droite) <= SEUIL_CONVERGENCE_DISTANCE))|| ((duree_match-timeout_init)>timeout_distance))
+    {
       convergence_distance = true;
+      timeout_init=0;
+    }
 
 
 
@@ -335,6 +361,8 @@ void setup() {
 
   //Init des entrées et sorties
   pinMode(TIRETTE, INPUT);
+
+  pinMode(CONTACTEUR, INPUT);
 
   //codeur Gauche
   pinMode(CODEUR_GAUCHE_A, INPUT_PULLUP);
@@ -395,19 +423,19 @@ void loop() {
             switch (ETAPE) {
               case 0:
                 //avancer de 10 cm
-                setDistance(15);
+                setDistance(170,4000);
                 ETAPE++;
                 break;  //fin de la première étape
 
               case 1:
                 //tourner de 90 deg
-                setAngle(-1.57);
+                setAngle(signe_equipe*1.57,2000);
                 ETAPE++;
                 break;  //fin de la deuxième étape
 
               case 2:
                 //avancer jusqu'aux pots c'est à dire distance énorme 200 cm
-                setDistance(115);
+                setDistance(115, 4000);
                 ETAPE++;
                 //setDistance(2000);
 
@@ -428,4 +456,23 @@ void loop() {
       }
     }
   }
+else{
+  if(analogRead(CONTACTEUR)<=500){
+    if(couleur_equipe==BLEU){
+    couleur_equipe = JAUNE;
+    signe_equipe=1;
+    delay(1000);
+    }
+    else{
+      couleur_equipe = BLEU;
+      signe_equipe=-1;
+      delay(1000);
+    }
+  }
+if(couleur_equipe==JAUNE)
+digitalWrite(LED, LOW);
+else
+digitalWrite(LED, HIGH);
+
+}
 }
